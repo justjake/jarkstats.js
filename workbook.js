@@ -3,31 +3,13 @@ jark = require( './jarkstats.js' );
 List = jark.objects.List;
 
 ar = [1,2,4,5,6,7,8,9,10];
-test = function( /* unlimited arguments */) {
+
+Arraytest = function( /* unlimited arguments */) {
 	var args = Array.prototype.slice.apply(arguments, [0]);
 	for (var i=0; i < args.length; i++) {
 		console.log( args[i].constructor );
 		return [ Object.prototype.toString.apply(args[i]) === '[object Array]', args[i].constructor == [].constructor ];
 	};
-}
-
-supertypeof = function (v) {
-	console.log( 'constructor is', v.constructor);
-	console.log( 'generic is', [].constructor);
-	console.log( [].constructor == [].constructor );
-	console.log( 'derp', [].constructor == [].constructor );
-	console.log( 'derp', v.constructor == [].constructor );
-	
-	
-	if (typeof(v) == "object") {
-		if (v === null) return "null";
-		if (v.constructor == (new Array).constructor) return "array";
-		if (v.constructor == (new Date).constructor) return "date";
-		if (v.constructor == (new RegExp).constructor) return "regex";
-		if (typeof v.type !== 'undefined') return v.type;
-		return "object";
-	}
-	return typeof(v);
 }
 
 // data

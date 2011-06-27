@@ -23,7 +23,7 @@
 		return new F();
 	}
 	
-	functions.typeof = function (v) {
+	functions.typeofConstructor = function (v) {
 		if (typeof(v) == "object") {
 			if (v === null) return "null";
 			if (v.constructor == (new Array).constructor) return "array";
@@ -33,6 +33,11 @@
 			return "object";
 		}
 		return typeof(v);
+	}
+	
+	// ECMAScript standard typeof
+	functions.objTypeof = function( value ) {
+		return Object.prototype.toString.apply(value)
 	}
 	
 	
@@ -91,28 +96,19 @@
 	
 	/* @class list */
 	objects.List = function( /* any number of args or arrays */ ) {
-		// array object that list acts as a wrapper for
-		this.array = []
-		
+				
 		// make a real array out of args
-		var args = Array.prototype.slice.apply(arguments, [0]);
+		var args = Array.prototype.slice.apply(arguments, []);
 		
-		// break arrays down, filter out objects
+		this.array = [];
+		this.units = objects.List.prototype.units;
+		
+		
 		for (var i = args.length - 1; i >= 0; i--) {
-			if ( typeof args[i] === 'number' ) {
-				this.array.push( args[i] );
-			} else if ( typeof args[i] === 'string' ) {
-				this.array.push( parseFloat(args[i]) );
-			} else if ( args[i].constructor == (new Array).constructor ) {
-				Array.prototype.push.apply( this.array, args[i] );
-			} else {
-				console.log('Bad argument', args[i]);
-				console.log('constructor is', args[i].constructor);
-				throw new TypeError('lists can only process numbers, arrays, and strings');
-			}
+			this.push( args[i] );
 		};
 		
-		// garuntee order
+		// ensure order
 		this._sortself();
 		
 		// return new list
@@ -126,33 +122,79 @@
 		return false;
 	}
 	objects.List.prototype = {
-		_sortself:	function() {
+		type: 'list'
+		, units: { prefix: '', suffix: '', multiplier: 1, fancy: false }
+		, _sortself:	function() {
 			// make sure no one is futzing with our internal array and adding numbers or anything
 			if ( !this.array.every(objects.List.check) ) {
 				throw new TypeError('lists can only process numbers, arrays, and strings');
 			}
-			this.array = this.array.sort( function(a,b){ return a - b });
+			this.array.sort( function(a,b){ return a - b });
 			return this;
 		}
-		, i: function( index, value ) {
-			var i;
-			if ( index < 0 ) {
-				i = this.array.length + index;
-			} else {
-				i = index - 1;
+		, _valueAsUnit: function( value, punctuateNumbers ) {
+			if ( punctuateNumbers ) {
+				return this.units.prefix + functions.punctuateNum(value * this.units.multiplier) + this.units.suffix;
 			}
-			
-			if ( typeof value === 'undefined' ) {
-				return this.array[i];
+			return this.units.prefix + (value * this.units.multiplier) + this.units.suffix;
+		}
+		, raw: function() {
+			return this.array;
+		}
+		// non-mutating addition
+		, plus: function( /* unlimited args */ ) {
+			return new objects.List( this.array, Array.prototype.slice.apply(arguments, []) );
+		}
+		, toString: function() {
+			return this.asUnits( false );
+		}
+		, prefix: function( string ) {
+			this.units.prefix = string;
+		}
+		, suffix: function( string ) {
+			this.units.suffix = string;
+		}
+		, asUnits: function( punctuateNumbers ) {
+			return this.array.map( function(v){
+				return this._valueAsUnit( v, punctuateNumbers );
+			}, this );
+		}
+		, toString: function() {
+			return this.array.toString();
+		}
+		, print: function() {
+			return '"' + this.asUnits( true ).join('", "') + '"';
+		}
+		// Handles all additions to the array
+		, push: function( value ) {
+			// handle arrays via recursion
+			if ( Object.prototype.toString.apply(value) === '[object Array]' ) {
+				for (var i = value.length - 1; i >= 0; i--){
+					this.push( value[i] );
+				};
+			} else if ( value.type ) {
+				// handle objects based on custom 'type'
+				if ( value.type === 'list' ) this.push( value.raw() );
 			} else {
-				if ( i < 0 ) {
-					this.array.push( objects.List.check(value) );
-				} else {
-					this.array[i] = objects.List.check( value );
-				}
-				
+				// handle foundation types
+				this.array.push( objects.List.check(value) );
+
 				this._sortself();
 				return this;
+			}
+		}
+		, i: function( index, value ) {
+			var i;			
+			if ( typeof value === 'undefined' ) {
+				if ( index < 0 ) {
+					i = this.array.length + index;
+				} else {
+					i = index - 1;
+				}
+				
+				return this.array[i];
+			} else {
+				this.push(value);
 			}
 		}
 		, indexOf: function( value ) {
@@ -176,7 +218,11 @@
 
 			// find index, rounding up, subtracting 1 because arays are zero-indexed
 			return this.i( Math.ceil(this.array.length * num));			
-		}, percentileOf: function( value ) {
+		}
+		, median: function() {
+			return this.percentile(50);
+		}
+		, percentileOf: function( value ) {
 			var l, i = this.indexOf( value );
 			if ( i ) {
 				// yay, el is in array
@@ -187,13 +233,28 @@
 			return (l.indexOf(value)-1) / this.array.length;
 		}
 		, sum: function() {
-			return functions.sum( this.array );
+			var s = 0;
+			for (var i = this.array.length - 1; i >= 0; i--){
+				thesum = thesum + this.array[i];
+			};
+			return thesum;
 		}
 		, mean: function() {
 			return this.sum() / this.array.length;
 		}
 		, mode: function() {
-			var counts = new Object();
+			var counts = [], d;
+			for (var i = this.array.length - 1; i >= 0; i--) {
+				if (typeof counts[ this.array[i] ] === 'undefined' ) {
+					counts[ this.array[i] ] = 1;
+				} else {
+					counts[ this.array[i] ] += 1;
+				}
+			}
+			var d = counts.map( function(i){return i})
+			  .sort( function(a,b){return b-a})
+			  [0];
+			return counts.indexOf(d);
 		}
 	}
 	

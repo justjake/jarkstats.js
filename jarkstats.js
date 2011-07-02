@@ -63,25 +63,6 @@
 	functions.objTypeof = function( value ) {
 		return Object.prototype.toString.apply(value)
 	}
-	
-	functions.strToArray = function( string ) {
-		return string.split( /[[0-9]|\.|-]/ )
-	}
-	
-	/* STATISTICS */
-	functions.sum = function( theArray ) {
-		var thesum = 0;
-		for (var i = theArray.length - 1; i >= 0; i--){
-			thesum = thesum + theArray[i];
-		};
-		return thesum;
-	}
-
-	functions.sort = function( theArray ) {
-		return theArray.sort( function( a, b ){
-			return a - b;
-		});
-	}
 
 	functions.punctuateNum = function( number ) {
 		var rep = ('' + number).split('.');
@@ -121,14 +102,16 @@
 	var objects = {}
 	
 	/* @class Summary 
+		Summary of 1 or 2 variable data
 		Uses whatever data is available for computations.
+		Uses the xList for 1-variable computations
 	*/
-	objects.Summary = function() {
-		this.xList = undefined;
+	objects.Summary = function(xList, yList) {
+		this.xList = ((typeof xList === 'object') && (xList.type === 'list')) ? xList : undefined;
 		this.SDx = undefined;
 		this.Meanx = undefined;
 		
-		this.yList = undefined;
+		this.yList = ((typeof yList === 'object') && (yList.type === 'list')) ? yList : undefined;
 		this.SDy = undefined;
 		this.Meany = undefined;
 		
@@ -136,6 +119,8 @@
 		
 		this.regressionSlope = undefined;
 		this.regressionLine = undefined;
+		
+		this.refresh();
 		
 		return this;
 	}
@@ -152,20 +137,35 @@
 				this.Meany = this.yList.mean();
 			}
 			if (this.xList && this.yList) {
-				this.r = this.xList.with(this.yList).correlation();
+				this.r = this.correlation();
 			}
 			
 			if (	(typeof this.SDx === 'number' )
 				 	&& (typeof this.SDy === 'number' )
 				 	&& (typeof this.r === 'number')
 				) {
-					this.sdSlope = functions.sign(this.r) * this.SDy / this.SDx;
-					this.regressionSlope = this.r * this.SDy / this.SDx;
-				}
+				// standard deviation slope
+				this.sdSlope = functions.sign(this.r) * this.SDy / this.SDx;
+				// regression line slope
+				this.regressionSlope = this.r * this.SDy / this.SDx;
 			}
+			
+		}
+		, correlation: function() {
+			var xu = this.xList.su().raw;
+			var yu = this.yList.su().raw;
+			
+			var total = 0;
+			
+			for (var i=0; i < xu.length; i++) {
+				total += xu[i] * yu[i];
+			};
+			return total/xu.length;
+		}
+		, sdLine: function( x, y ) {
+			return new objects.Line.pointSlope( x, y, this.sdSlope );			
 		}
 		, regressionLine: function( x, y ) {
-			this.refresh();
 			return new objects.Line.pointSlope( x, y, this.regressionSlope );
 		}
 	}
@@ -233,7 +233,7 @@
 		// Mutator Methods
 		, push: function( value ) {
 			// handle arrays via recursion
-			if ( Object.prototype.toString.apply(value) === '[object Array]' ) {
+			if ( functions.objTypeof(value) === '[object Array]' ) {
 				for (var i = 0; i < value.length; i++ ){
 					this.push( value[i] );
 				};
@@ -252,18 +252,7 @@
 			}
 		}
 		, with: function( list ) {
-			// multivariat combanation for x y. 'this' is x, 'list' is y
-			// var result = [];
-			// 
-			// for (var i=0; i < this.raw.length; i++) {
-			// 	result.push( [ this.raw[i], list.raw[i] ] );
-			// };
-			// 
-			// return result;
-			
 			return new objects.Table( this, list );
-			
-			
 		}
 		// Queries
 		, raw: function() {
@@ -458,22 +447,42 @@
 		}
 	}
 	
-	// tables
+	/* @class Table
+		collects related list data together
+		relies on Summary objects for summary statistics and lines.
+	*/
 	objects.Table = function( /* n lists */ ) {
 		this.lists = [];
 		
 		// make a real array out of args
-		var args = Array.prototype.slice.apply(arguments, []);
+		var args = Array.prototype.slice.apply(arguments, [0]);
 		
 		for (var i=0; i < args.length; i++) {
-			this.lists.push( args[i] );
+			// push provides sanitization for Table
+			this.push( args[i] ); 
 		};
 		
 		return this;
 	}
-	// STATIC FUNCTIONS
-
-	// METHODS
+	objects.Table._normalizeType = function(v) {
+		// normalizes values to be of type Table
+		// accepts only arrays, lists, and tables
+		var result = new objects.Table();
+		if (typeof v === 'object') {
+			if ( functions.objTypeof(value) === '[object Array]' ) {
+				result.lists.push( new objects.List(v) );
+			} else if ( v.type === 'list' ) {
+				result.lists.push( v );
+			} else if ( v.type === 'table' ) {
+				result = v;
+			} else {
+				throw new TypeError('Attempting to use non-listable type with Table');
+			}
+			return result;
+		}
+		throw new TypeError('Attempting to use non-listable type with Table');
+	}
+	
 	objects.Table.prototype = {
 		  type: 'table'
 		, together: function() {
@@ -489,53 +498,45 @@
 			
 			return result;
 		}
-		// CORRELATION CONSTANT r
-		, correlation: function( xTableIndex, yTableIndex ) {
-			var x = (typeof xTableIndex === 'number') ? this.lists[xTableIndex] : this.lists[0];
-			var y = (typeof yTableIndex === 'number') ? this.lists[yTableIndex] : this.lists[1];
+		, push: function( v ) {
+			var t = new objects.Table();
+			// make v a table if it isn't
+			if (typeof v === 'object') {
+				if ( functions.objTypeof(value) === '[object Array]' ) {
+					t.lists.push( new objects.List(v) );
+				} else if ( v.type === 'list' ) {
+					t.lists.push( v );
+				} else if ( v.type === 'table' ) {
+					t = v;
+				} else {
+					throw new TypeError('Attempting to use non-listable type with Table');
+				}
+			} else {
+				throw new TypeError('Attempting to use non-listable type with Table');
+			}
 			
-			var xu = x.su().raw;
-			var yu = y.su().raw;
-			
-			var total = 0;
-			
-			for (var i=0; i < xu.length; i++) {
-				total += xu[i] * yu[i];
+			// merge t into this table
+			for (var i=0; i < t.lists.length; i++) {
+				this.lists.push( t.lists[i] );
 			};
 			
-			return total/xu.length;
+			// why not
+			return this;
 		}
-		// SLOPES AND LINES
-		, sdSlope: function( xIndex, yIndex ) {
+		, with: function( /* lists or tables */ ) {
+			var result = new objects.Table(), args = Array.prototype.slice.apply(arguments, [0]);
+			result.push( this );
+			for (var i=0; i < args.length; i++) {
+				result.push( args[i] );
+			};
+			return result;
+		}
+		, summary: function( xIndex, yIndex ) {
 			var x = (typeof xIndex === 'number') ? this.lists[xIndex] : this.lists[0];
 			var y = (typeof yIndex === 'number') ? this.lists[yIndex] : this.lists[1];
-			if ( this.correlation( xIndex, yIndex ) < 0 ) {
-				return  -1 * y.sd() / x.sd();
-			} else {
-				return y.sd() / x.sd();
-			}
-		}
-		, regressionSlope: function( xIndex, yIndex ) {
-			var x = (typeof xIndex === 'number') ? this.lists[xIndex] : this.lists[0];
-			var y = (typeof yIndex === 'number') ? this.lists[yIndex] : this.lists[1];
 			
-			return this.correlation( xIndex, yIndex ) * ( y.sd() / x.sd() )
-		}
-		, sdLine: function( xIndex, yIndex ) {
-			var ix = (typeof xIndex === 'number') ? xIndex : 0;
-			var iy = (typeof yIndex === 'number') ? yIndex : 1;
-			
-			var slope = this.sdSlope( ix, iy );
-			return objects.Line.pointSlope( this.lists[ix].mean(), this.lists[iy].mean(), slope );
-		}
-		, regressionLine: function( xIndex, yIndex ) {
-			var ix = (typeof xIndex === 'number') ? xIndex : 0;
-			var iy = (typeof yIndex === 'number') ? yIndex : 1;
-			
-			var slope = this.regressionSlope( ix, iy );
-			return objects.Line.pointSlope( this.lists[ix].mean(), this.lists[iy].mean(), slope );
-		}
-		
+			return new objects.Summary(x, y);
+		}		
 	}
 	
 	

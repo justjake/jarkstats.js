@@ -5,6 +5,8 @@ jark = require( './jarkstats.js' );
 List = jark.objects.List;
 Table = jark.objects.Table;
 Line = jark.objects.Line;
+Summary = jark.objects.Summary;
+
 ar = [1,2,4,5,6,7,8,9,10];
 
 Arraytest = function( /* unlimited arguments */) {
@@ -25,7 +27,7 @@ data.correlation.temp = new List( [ 64,	80,	64,	56,	90,	70,	60,	77,	58,	71 ] );
 data.correlation.rain = new List( [ 88,	89,	122,	136,	86,	117,	101,	92,	116,	95, ] );
 
 data.my = {}
-data.my.hw = new List( [ 95.0,	100.0,	100.0,	91.7,	100.0, 100.0, 100.0] );
+data.my.hw = new List( [ 95.0,	100.0,	100.0,	91.7,	100.0, 95.0, 100.0, 100.0, 94.1, 80.0] );
 data.my.allhw = function( assumedScore ) {
 	var s = assumedScore;
 	// is it 28 or 26???
@@ -36,7 +38,7 @@ data.my.allhw = function( assumedScore ) {
 	}
 	return result;
 }
-//data.my.total = data.my.allhw(0);
+//data.my.total = data.my.allhw(75);
 
 
 deeptree = { one: { two: { three: { four: 'LOL!!!' } } } }

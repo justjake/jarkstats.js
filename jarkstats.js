@@ -97,6 +97,16 @@
 
 		return list.sort( function(a, b){ return a - b; } )[index];
 	}
+	
+	functions.factorial = function(n) {
+		if ( n % 1 !== 0 ) {
+			throw new TypeError('Integers only');
+		}
+		if ( n == 0 || n == 1 ) {
+			return 1;
+		}
+		return ( n * functions.factorial(n-1) );
+	}
 
 	// objects
 	var objects = {}
@@ -106,7 +116,33 @@
 		Uses whatever data is available for computations.
 		Uses the xList for 1-variable computations
 	*/
+	
+	objects.Counting = function(){};
+	objects.Counting.prototype = {
+		  type: 'counting'
+		, nPk: function(n, k) {
+			/*
+			The number of possible permutations (orderings) of k of n things is
+				nPk = n!/(n−k)!
+			(k must be at least 0 and no larger than n.)
+			*/
+			// for choosing k things in order from n total
+			return functions.factorial(n) / functions.factorial(n-k);
+		}
+		, nCk: function(n, k) {
+			/*
+			Combinations
+
+			The number of possible combinations of n things taken k at a time (without regard to order) is
+				nCk = n! / (k!*(n-k)!)
+			(k must be less than or equal to n.)
+			*/
+			return functions.factorial(n) / (functions.factorial(n-k) * functions.factorial(k));
+		}
+	}
+	
 	objects.Summary = function(xList, yList) {
+		//@TODO rewrite to use x: {} and y: {} instead of SDx, ...
 		this.xList = ((typeof xList === 'object') && (xList.type === 'list')) ? xList : undefined;
 		this.SDx = undefined;
 		this.Meanx = undefined;
@@ -118,7 +154,7 @@
 		this.r = undefined;
 		
 		this.regressionSlope = undefined;
-		this.regressionLine = undefined;
+		this.regressionErrorRMS = undefined;
 		
 		this.refresh();
 		
@@ -148,7 +184,12 @@
 				this.sdSlope = functions.sign(this.r) * this.SDy / this.SDx;
 				// regression line slope
 				this.regressionSlope = this.r * this.SDy / this.SDx;
+				// RMS regression error
+				this.regressionErrorRMS = Math.sqrt( 1-Math.pow(this.r,2) ) * this.SDy;
 			}
+			
+			// chain
+			return this;
 			
 		}
 		, correlation: function() {
@@ -163,10 +204,36 @@
 			return total/xu.length;
 		}
 		, sdLine: function( x, y ) {
-			return new objects.Line.pointSlope( x, y, this.sdSlope );			
+			var px = ((! x) && (this.Meanx)) ? this.Meanx : x;
+			var py = ((! y) && (this.Meany)) ? this.Meanx : y;
+			
+			return objects.Line.pointSlope( px, py, this.sdSlope );
 		}
 		, regressionLine: function( x, y ) {
-			return new objects.Line.pointSlope( x, y, this.regressionSlope );
+			var px = ((! x) && (this.Meanx)) ? this.Meanx : x;
+			var py = ((! y) && (this.Meany)) ? this.Meanx : y;
+			
+			return objects.Line.pointSlope( px, py, this.regressionSlope );
+		}
+		, XonY: function() {
+			var result = new objects.Summary();
+			result.xList = this.yList;
+			result.SDx = this.SDy;
+			result.Meanx = this.Meany;
+
+			result.yList = this.xList;
+			result.SDy = this.SDx;
+			result.Meany = this.Meanx;
+
+			result.r = this.r;
+
+			// for now we force these to be recalculated.
+			// result.regressionSlope = undefined;
+			// result.regressionLine = undefined;
+			// result.regressionErrorRMS = undefined;
+			
+			result.refresh();
+			return result;
 		}
 	}
 	
